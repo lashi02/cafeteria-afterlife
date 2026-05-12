@@ -10,6 +10,7 @@ from app.db import CafeDB
 from app.ui.views.contabilidad import ContabilidadView
 from app.ui.views.inventario_menu import InventarioMenuView
 from app.ui.views.mesas import MesasView
+from app.ui.views.ventas_cobradas import VentasCobradasView
 
 
 class CafeApp(ctk.CTk):
@@ -54,6 +55,11 @@ class CafeApp(ctk.CTk):
         )
         self.btn_conta.grid(row=3, column=0, padx=16, pady=8, sticky="ew")
 
+        self.btn_ventas = ctk.CTkButton(
+            self.sidebar, text="Ventas cobradas", command=self._show_ventas_cobradas
+        )
+        self.btn_ventas.grid(row=4, column=0, padx=16, pady=8, sticky="ew")
+
         self.btn_cierre = ctk.CTkButton(
             self.sidebar,
             text="Cierre de Día",
@@ -68,10 +74,20 @@ class CafeApp(ctk.CTk):
         self.content.grid_rowconfigure(0, weight=1)
         self.content.grid_columnconfigure(0, weight=1)
 
-        self.view_mesas = MesasView(self.content, self.db)
+        self.view_mesas = MesasView(self.content, self.db, on_cobrar=self._on_mesa_cobrada)
         self.view_inventario = InventarioMenuView(self.content, self.db)
         self.view_conta = ContabilidadView(self.content, self.db)
+        self.view_ventas = VentasCobradasView(self.content, self.db, on_reabrir=self._on_reabrir_mesa)
 
+        self._show_mesas()
+
+    def _on_mesa_cobrada(self) -> None:
+        self.view_conta.refresh()
+        self.view_ventas.refresh()
+
+    def _on_reabrir_mesa(self, venta_id: int, mesa: str) -> None:
+        self.db.reabrir_venta(venta_id)
+        self.view_mesas.reabrir_mesa(mesa, venta_id)
         self._show_mesas()
 
     def _clear_content(self) -> None:
@@ -91,6 +107,11 @@ class CafeApp(ctk.CTk):
         self._clear_content()
         self.view_conta.refresh()
         self.view_conta.grid(row=0, column=0, sticky="nsew")
+
+    def _show_ventas_cobradas(self) -> None:
+        self._clear_content()
+        self.view_ventas.refresh()
+        self.view_ventas.grid(row=0, column=0, sticky="nsew")
 
     def _cierre_de_dia(self) -> None:
         if not messagebox.askyesno(
@@ -130,6 +151,7 @@ class CafeApp(ctk.CTk):
         )
         self.view_mesas.refresh()
         self.view_conta.refresh()
+        self.view_ventas.refresh()
 
     def _on_close(self) -> None:
         try:
