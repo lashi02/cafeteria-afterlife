@@ -17,9 +17,10 @@ class MesaState:
 
 
 class MesasView(ctk.CTkFrame):
-    def __init__(self, master: ctk.CTkFrame, db: CafeDB) -> None:
+    def __init__(self, master: ctk.CTkFrame, db: CafeDB, on_cobrar: callable | None = None) -> None:
         super().__init__(master)
         self.db = db
+        self.on_cobrar = on_cobrar
         self.mesas: dict[str, MesaState] = {}
         self.selected_mesa: str | None = None
 
@@ -385,26 +386,51 @@ class MesasView(ctk.CTkFrame):
         dialog.transient(self)
 
         dialog.grid_columnconfigure(0, weight=1)
-        dialog.grid_rowconfigure(2, weight=1)
+        dialog.grid_rowconfigure(3, weight=1)
 
         header = ctk.CTkFrame(dialog)
         header.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
         ctk.CTkLabel(header, text=f"Productos para {mesa}", font=ctk.CTkFont(size=16, weight="bold")).pack()
 
         search_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        search_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
+        search_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 6))
 
         search_var = ctk.StringVar()
-        ctk.CTkEntry(search_frame, placeholder_text="Buscar producto...", textvariable=search_var, width=300).pack(
-            side="left", padx=(0, 10)
+        ctk.CTkEntry(search_frame, placeholder_text="Buscar producto...", textvariable=search_var, width=280).pack(
+            side="left", padx=(0, 8)
         )
 
         cat_var = ctk.StringVar(value="Todas")
-        cat_menu = ctk.CTkOptionMenu(search_frame, values=["Todas"], variable=cat_var)
+        cat_menu = ctk.CTkOptionMenu(search_frame, values=["Todas"], variable=cat_var, width=140)
         cat_menu.pack(side="left")
 
+        qty_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        qty_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 8))
+        qty_frame.grid_columnconfigure(3, weight=1)
+
+        ctk.CTkLabel(qty_frame, text="Cantidad:", font=ctk.CTkFont(size=13)).pack(side="left", padx=(0, 8))
+
+        qty_var = ctk.IntVar(value=1)
+
+        def _decrementar() -> None:
+            v = qty_var.get()
+            if v > 1:
+                qty_var.set(v - 1)
+
+        def _incrementar() -> None:
+            qty_var.set(qty_var.get() + 1)
+
+        btn_minus = ctk.CTkButton(qty_frame, text="−", width=32, height=32, command=_decrementar)
+        btn_minus.pack(side="left", padx=(0, 4))
+
+        qty_entry = ctk.CTkEntry(qty_frame, textvariable=qty_var, width=60, justify="center")
+        qty_entry.pack(side="left", padx=(0, 4))
+
+        btn_plus = ctk.CTkButton(qty_frame, text="+", width=32, height=32, command=_incrementar)
+        btn_plus.pack(side="left")
+
         productos_frame = ctk.CTkScrollableFrame(dialog)
-        productos_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        productos_frame.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
         producto_btns: list[ctk.CTkButton] = []
         db = self.db
@@ -437,7 +463,12 @@ class MesasView(ctk.CTkFrame):
             if mesa not in self.mesas:
                 return
             try:
-                self.db.agregar_item_a_venta(self.mesas[mesa].venta_id, p, cantidad=1)
+                cantidad = int(qty_var.get())
+                if cantidad < 1:
+                    raise ValueError("La cantidad debe ser al menos 1.")
+                if p.usa_inventario and cantidad > p.stock:
+                    raise ValueError(f"Stock insuficiente para '{p.nombre}'. Disponible: {p.stock}.")
+                self.db.agregar_item_a_venta(self.mesas[mesa].venta_id, p, cantidad=cantidad)
                 self._render_mesas_grid()
                 if self.selected_mesa == mesa:
                     self._actualizar_sidebar()
@@ -465,11 +496,13 @@ class MesasView(ctk.CTkFrame):
             return
         total = sum(float(it["subtotal"]) for it in items)
         if messagebox.askyesno("Confirmar", f"Cobrar {total:.2f} de {mesa}?"):
-            self.db.borrar_venta(self.mesas[mesa].venta_id)
+            self.db.finalizar_venta(self.mesas[mesa].venta_id)
             del self.mesas[mesa]
             self._render_mesas_grid()
             if self.selected_mesa == mesa:
                 self._mostrar_sidebar_vacio()
+            if self.on_cobrar:
+                self.on_cobrar()
             messagebox.showinfo("Éxito", f"Mesa {mesa} cobrada: {total:.2f}")
 
     def _cerrar_mesa(self, mesa: str) -> None:
@@ -481,6 +514,14 @@ class MesasView(ctk.CTkFrame):
             self._render_mesas_grid()
             if self.selected_mesa == mesa:
                 self._mostrar_sidebar_vacio()
+
+    def reabrir_mesa(self, mesa: str, venta_id: int) -> None:
+        if mesa in self.mesas:
+            messagebox.showwarning("Reabrir", f"{mesa} ya está abierta.")
+            return
+        self.mesas[mesa] = MesaState(mesa=mesa, venta_id=venta_id, tiempo_inicio=time.time())
+        self._render_mesas_grid()
+        self._mostrar_sidebar_mesa(mesa)
 
     def refresh(self) -> None:
         self._render_mesas_grid()
