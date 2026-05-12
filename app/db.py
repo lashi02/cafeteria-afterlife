@@ -54,7 +54,9 @@ class CafeDB:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fecha TEXT NOT NULL,
                 mesa TEXT NOT NULL,
-                total REAL NOT NULL DEFAULT 0
+                total REAL NOT NULL DEFAULT 0,
+                pagado INTEGER NOT NULL DEFAULT 0,
+                pagado_en TEXT
             );
             """
         )
@@ -74,6 +76,13 @@ class CafeDB:
             );
             """
         )
+
+        # Migraciones para bases existentes
+        for col, definition in [("pagado", "INTEGER NOT NULL DEFAULT 0"), ("pagado_en", "TEXT")]:
+            try:
+                self._conn.execute(f"ALTER TABLE ventas_diarias ADD COLUMN {col} {definition};")
+            except sqlite3.OperationalError:
+                pass
 
         self._conn.commit()
 
@@ -281,10 +290,10 @@ class CafeDB:
     def listar_items_venta(self, venta_id: int) -> list[sqlite3.Row]:
         return self._conn.execute(
             """
-            SELECT id, nombre_producto, precio_unitario, cantidad, subtotal
+            SELECT id, nombre_producto, categoria, precio_unitario, cantidad, subtotal
             FROM detalle_ventas
             WHERE venta_id = ?
-            ORDER BY id DESC;
+            ORDER BY id ASC;
             """,
             (int(venta_id),),
         ).fetchall()
@@ -306,13 +315,33 @@ class CafeDB:
         self._conn.execute("DELETE FROM ventas_diarias WHERE id = ?;", (int(venta_id),))
         self._conn.commit()
 
-    # ---------- Reporte / cierre ----------
-    def generar_reporte_csv(self, ruta_csv: Path) -> dict[str, Any]:
-        """
-        Retorna metadatos del reporte: {'gran_total': float, 'filas': int}
-        """
-        ruta_csv = Path(ruta_csv)
+    def finalizar_venta(self, venta_id: int) -> None:
+        from datetime import datetime
+        ahora = datetime.now().strftime("%H:%M")
+        self._conn.execute(
+            "UPDATE ventas_diarias SET pagado = 1, pagado_en = ? WHERE id = ?;",
+            (ahora, int(venta_id)),
+        )
+        self._conn.commit()
 
+    def reabrir_venta(self, venta_id: int) -> None:
+        self._conn.execute(
+            "UPDATE ventas_diarias SET pagado = 0 WHERE id = ?;", (int(venta_id),)
+        )
+        self._conn.commit()
+
+    def listar_ventas_pagadas(self) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            """
+            SELECT id, mesa, total, pagado_en
+            FROM ventas_diarias
+            WHERE pagado = 1
+            ORDER BY id DESC;
+            """
+        ).fetchall()
+
+    # ---------- Reporte / cierre ----------
+    def _query_resumen(self) -> tuple[list[sqlite3.Row], float]:
         rows = self._conn.execute(
             """
             SELECT
@@ -322,18 +351,25 @@ class CafeDB:
                 GROUP_CONCAT(DISTINCT v.mesa) AS mesas,
                 SUM(d.subtotal) AS total_producto
             FROM detalle_ventas d
-            JOIN ventas_diarias v ON v.id = d.venta_id
+            JOIN ventas_diarias v ON v.id = d.venta_id AND v.pagado = 1
             GROUP BY d.nombre_producto, d.precio_unitario
             ORDER BY total_producto DESC, producto ASC;
             """
         ).fetchall()
-
-        gran_total_row = self._conn.execute(
-            "SELECT COALESCE(SUM(total),0) AS gt FROM ventas_diarias;"
+        gt = self._conn.execute(
+            "SELECT COALESCE(SUM(total),0) AS gt FROM ventas_diarias WHERE pagado = 1;"
         ).fetchone()
-        gran_total = float(gran_total_row["gt"]) if gran_total_row else 0.0
+        gran_total = float(gt["gt"]) if gt else 0.0
+        return rows, gran_total
 
+    def generar_reporte_csv(self, ruta_csv: Path) -> dict[str, Any]:
+        """
+        Retorna metadatos del reporte: {'gran_total': float, 'filas': int}
+        """
+        rows, gran_total = self._query_resumen()
+        ruta_csv = Path(ruta_csv)
         ruta_csv.parent.mkdir(parents=True, exist_ok=True)
+
         with ruta_csv.open("w", encoding="utf-8", newline="") as f:
             import csv
 
@@ -356,25 +392,7 @@ class CafeDB:
         return {"gran_total": gran_total, "filas": len(rows)}
 
     def obtener_resumen_diario_agrupado(self) -> tuple[list[sqlite3.Row], float]:
-        rows = self._conn.execute(
-            """
-            SELECT
-                d.nombre_producto AS producto,
-                d.precio_unitario AS precio,
-                SUM(d.cantidad) AS cantidad_total,
-                GROUP_CONCAT(DISTINCT v.mesa) AS mesas,
-                SUM(d.subtotal) AS total_producto
-            FROM detalle_ventas d
-            JOIN ventas_diarias v ON v.id = d.venta_id
-            GROUP BY d.nombre_producto, d.precio_unitario
-            ORDER BY total_producto DESC, producto ASC;
-            """
-        ).fetchall()
-        gt = self._conn.execute(
-            "SELECT COALESCE(SUM(total),0) AS gt FROM ventas_diarias;"
-        ).fetchone()
-        gran_total = float(gt["gt"]) if gt else 0.0
-        return rows, gran_total
+        return self._query_resumen()
 
     def limpiar_dia(self) -> None:
         self._conn.execute("DELETE FROM detalle_ventas;")

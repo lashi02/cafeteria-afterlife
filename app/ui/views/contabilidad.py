@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import tkinter as tk
 from datetime import date
 from pathlib import Path
 from tkinter import messagebox
@@ -53,7 +52,7 @@ class ContabilidadView(ctk.CTkFrame):
 
         self.table = ttk.Treeview(
             table_frame,
-            columns=("producto", "precio", "cantidad", "mesas", "total"),
+            columns=("producto", "precio", "cantidad", "total"),
             show="headings",
             selectmode="browse",
         )
@@ -62,14 +61,12 @@ class ContabilidadView(ctk.CTkFrame):
         self.table.heading("producto", text="Producto", anchor="w")
         self.table.heading("precio", text="Precio", anchor="e")
         self.table.heading("cantidad", text="Cantidad", anchor="center")
-        self.table.heading("mesas", text="Mesas", anchor="w")
         self.table.heading("total", text="Total", anchor="e")
 
-        self.table.column("producto", width=180, minwidth=120)
-        self.table.column("precio", width=80, minwidth=60, anchor="e")
-        self.table.column("cantidad", width=70, minwidth=50, anchor="center")
-        self.table.column("mesas", width=200, minwidth=100)
-        self.table.column("total", width=90, minwidth=70, anchor="e")
+        self.table.column("producto", width=200, minwidth=140)
+        self.table.column("precio", width=90, minwidth=70, anchor="e")
+        self.table.column("cantidad", width=80, minwidth=60, anchor="center")
+        self.table.column("total", width=100, minwidth=80, anchor="e")
 
         scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.table.yview)
         self.table.configure(yscrollcommand=scrollbar.set)
@@ -86,7 +83,7 @@ class ContabilidadView(ctk.CTkFrame):
             self.table.delete(item)
 
         if not rows:
-            self.table.insert("", "end", values=("Sin ventas registradas hoy", "", "", "", ""))
+            self.table.insert("", "end", values=("Sin ventas registradas hoy", "", "", ""))
         else:
             for r in rows:
                 self.table.insert(
@@ -96,7 +93,6 @@ class ContabilidadView(ctk.CTkFrame):
                         r["producto"],
                         f"{float(r['precio']):.2f}",
                         int(r["cantidad_total"]),
-                        r["mesas"] or "",
                         f"{float(r['total_producto']):.2f}",
                     )
                 )
@@ -115,4 +111,3 @@ class ContabilidadView(ctk.CTkFrame):
             f"Productos agrupados: {meta['filas']}\n"
             f"Gran total: {meta['gran_total']:.2f}",
         )
-
