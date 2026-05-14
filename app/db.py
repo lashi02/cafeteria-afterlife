@@ -290,7 +290,7 @@ class CafeDB:
     def listar_items_venta(self, venta_id: int) -> list[sqlite3.Row]:
         return self._conn.execute(
             """
-            SELECT id, nombre_producto, categoria, precio_unitario, cantidad, subtotal
+            SELECT id, producto_id, nombre_producto, categoria, precio_unitario, cantidad, subtotal
             FROM detalle_ventas
             WHERE venta_id = ?
             ORDER BY id ASC;
@@ -299,13 +299,26 @@ class CafeDB:
         ).fetchall()
 
     def borrar_item_detalle(self, detalle_id: int) -> None:
-        # Nota: no reponemos stock en este MVP (se puede añadir luego).
         row = self._conn.execute(
-            "SELECT venta_id FROM detalle_ventas WHERE id = ?;", (int(detalle_id),)
+            "SELECT venta_id, producto_id, cantidad FROM detalle_ventas WHERE id = ?;",
+            (int(detalle_id),),
         ).fetchone()
         if row is None:
             return
         venta_id = int(row["venta_id"])
+        producto_id = row["producto_id"]
+        cantidad = int(row["cantidad"])
+
+        if producto_id is not None:
+            prod_row = self._conn.execute(
+                "SELECT usa_inventario FROM productos WHERE id = ?;", (producto_id,)
+            ).fetchone()
+            if prod_row is not None and bool(int(prod_row["usa_inventario"])):
+                self._conn.execute(
+                    "UPDATE productos SET stock = stock + ? WHERE id = ?;",
+                    (cantidad, producto_id),
+                )
+
         self._conn.execute("DELETE FROM detalle_ventas WHERE id = ?;", (int(detalle_id),))
         self._recalcular_total_venta(venta_id)
         self._conn.commit()

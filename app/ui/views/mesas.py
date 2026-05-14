@@ -155,49 +155,68 @@ class MesasView(ctk.CTkFrame):
             self.lbl_total.configure(text="Total: 0.00")
             return
 
-        grouped: dict[str, dict] = {}
-        for it in items:
-            nombre = it["nombre_producto"]
-            if nombre not in grouped:
-                grouped[nombre] = {
-                    "precio": float(it["precio_unitario"]),
-                    "cantidad": 0,
-                    "subtotal": 0.0,
-                }
-            grouped[nombre]["cantidad"] += int(it["cantidad"])
-            grouped[nombre]["subtotal"] += float(it["subtotal"])
-
         gran_total = 0.0
-        for nombre, data in grouped.items():
+        for it in items:
+            detalle_id = int(it["id"])
+            nombre = str(it["nombre_producto"])
+            precio = float(it["precio_unitario"])
+            cantidad = int(it["cantidad"])
+            subtotal = float(it["subtotal"])
+            gran_total += subtotal
+
             row = ctk.CTkFrame(self.sidebar_items)
             row.pack(fill="x", padx=2, pady=4)
             row.grid_columnconfigure(0, weight=1)
 
-            cantidad = data["cantidad"]
-            precio = data["precio"]
-            subtotal = data["subtotal"]
-            gran_total += subtotal
+            ctk.CTkLabel(
+                row, text=nombre, anchor="w", font=ctk.CTkFont(size=11)
+            ).grid(row=0, column=0, columnspan=3, padx=6, pady=(6, 2), sticky="ew")
+
+            info_frame = ctk.CTkFrame(row, fg_color="transparent")
+            info_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=(0, 6))
+            info_frame.grid_columnconfigure(0, weight=1)
 
             ctk.CTkLabel(
-                row, text=nombre, anchor="w", font=ctk.CTkFont(size=12)
-            ).grid(row=0, column=0, columnspan=2, padx=6, pady=(6, 2), sticky="ew")
-
-            ctk.CTkLabel(
-                row,
+                info_frame,
                 text=f"{cantidad} x {precio:.2f}",
                 text_color="gray",
                 font=ctk.CTkFont(size=10),
-            ).grid(row=1, column=0, padx=6, pady=(0, 6), sticky="w")
+            ).pack(side="left")
 
             ctk.CTkLabel(
-                row,
+                info_frame,
                 text=f"{subtotal:.2f}",
                 font=ctk.CTkFont(size=12, weight="bold"),
-            ).grid(row=1, column=1, padx=6, pady=(0, 6), sticky="e")
+            ).pack(side="right")
+
+            ctk.CTkButton(
+                row,
+                text="Eliminar",
+                width=60,
+                height=24,
+                fg_color="#b23b3b",
+                hover_color="#8d2f2f",
+                font=ctk.CTkFont(size=10),
+                command=lambda did=detalle_id: self._eliminar_item_sidebar(did),
+            ).grid(row=1, column=2, padx=(0, 6), pady=(0, 6), sticky="e")
 
             self.sidebar_item_rows.append(row)
 
         self.lbl_total.configure(text=f"Total: {gran_total:.2f}")
+
+    def _eliminar_item_sidebar(self, detalle_id: int) -> None:
+        if not messagebox.askyesno(
+            "Eliminar producto",
+            "¿Estás seguro de eliminar este producto de la mesa?\n"
+            "El stock será restaurado automáticamente.",
+        ):
+            return
+        try:
+            self.db.borrar_item_detalle(detalle_id)
+            self._render_mesas_grid()
+            self._actualizar_sidebar()
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo eliminar el producto.\n\n{e}")
 
     def _render_mesas_grid(self) -> None:
         for btn in self.mesa_btns.values():
