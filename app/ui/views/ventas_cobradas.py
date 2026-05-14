@@ -116,8 +116,8 @@ class VentasCobradasView(ctk.CTkFrame):
 
         style = ttk.Style()
         style.theme_use("clam")
-        style.configure("Treeview", background="#2b2b2b", foreground="white", rowheight=26, fieldbackground="#2b2b2b")
-        style.configure("Treeview.Heading", background="#3a3a3a", foreground="white", font=("TkDefaultFont", 9, "bold"))
+        style.configure("Treeview", background="#2b2b2b", foreground="white", rowheight=32, fieldbackground="#2b2b2b", font=("TkDefaultFont", 20))
+        style.configure("Treeview.Heading", background="#3a3a3a", foreground="white", font=("TkDefaultFont", 20, "bold"))
         style.map("Treeview", background=[("selected", "#1f6aa5")])
 
         table = ttk.Treeview(
