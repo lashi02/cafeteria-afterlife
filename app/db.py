@@ -383,10 +383,13 @@ class CafeDB:
         ruta_csv = Path(ruta_csv)
         ruta_csv.parent.mkdir(parents=True, exist_ok=True)
 
+        top = sorted(rows, key=lambda r: (int(r["cantidad_total"]), float(r["total_producto"])), reverse=True)[:5]
+
         with ruta_csv.open("w", encoding="utf-8", newline="") as f:
             import csv
 
             w = csv.writer(f)
+
             w.writerow(
                 ["Producto", "Precio", "Cantidad total (hoy)", "Mesas", "Total acumulado (producto)"]
             )
@@ -401,6 +404,20 @@ class CafeDB:
                     ]
                 )
             w.writerow(["Gran Total", "", "", "", f"{gran_total:.2f}"])
+
+            w.writerow([])
+            w.writerow(["=== TOP 5 PRODUCTOS ===", "", "", "", ""])
+            w.writerow(["#", "Producto", "Cantidad", "Total", ""])
+            for i, r in enumerate(top, start=1):
+                w.writerow(
+                    [
+                        i,
+                        r["producto"],
+                        int(r["cantidad_total"]),
+                        f"{float(r['total_producto']):.2f}",
+                        "",
+                    ]
+                )
 
         return {"gran_total": gran_total, "filas": len(rows)}
 
